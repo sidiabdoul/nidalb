@@ -90,10 +90,10 @@ app.post('/api/vote', async (req, res) => {
     const { name, matricule, choice, opinion } = req.body;
 
     // Validate required fields
-    if (!name || !matricule || !choice || !opinion) {
+    if (!name || !matricule || !choice) {
       return res.status(400).json({
         message: 'Missing required fields',
-        error: 'Please provide name, matricule, choice, and opinion'
+        error: 'Please provide name, matricule, and choice'
       });
     }
 
@@ -102,6 +102,14 @@ app.post('/api/vote', async (req, res) => {
       return res.status(400).json({
         message: 'Invalid choice',
         error: 'Choice must be either "for" or "against"'
+      });
+    }
+
+    // Validate opinion is required only for 'against' choice
+    if (choice === 'against' && !opinion) {
+      return res.status(400).json({
+        message: 'Opinion required',
+        error: 'Please provide an opinion when voting against'
       });
     }
 
@@ -119,7 +127,7 @@ app.post('/api/vote', async (req, res) => {
       name,
       matricule,
       choice,
-      opinion
+      opinion: opinion || '' // Make opinion optional
     });
 
     await vote.save();
