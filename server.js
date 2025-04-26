@@ -272,8 +272,13 @@ app.get('/api/votes', async (req, res) => {
   try {
     // Check for admin token
     const adminToken = req.headers['x-admin-token'];
-    if (!adminToken || adminToken !== process.env.ADMIN_TOKEN) {
-      return res.status(403).json({ message: 'Unauthorized access' });
+    if (!adminToken) {
+      return res.status(403).json({ message: 'Admin token is required' });
+    }
+
+    // Validate admin token
+    if (adminToken !== process.env.ADMIN_TOKEN) {
+      return res.status(403).json({ message: 'Invalid admin token' });
     }
 
     const votes = await User.find({}, { _id: 0, __v: 0 })
