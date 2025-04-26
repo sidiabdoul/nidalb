@@ -268,12 +268,22 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 // Get all votes (admin only)
-app.get('/api/votes', authenticateAdmin, async (req, res) => {
+app.get('/api/votes', async (req, res) => {
   try {
-    const votes = await User.find().sort({ createdAt: -1 });
-    res.json({ message: 'Votes retrieved successfully', data: votes });
+    // Check for admin token
+    const adminToken = req.headers['x-admin-token'];
+    if (!adminToken || adminToken !== process.env.ADMIN_TOKEN) {
+      return res.status(403).json({ message: 'Unauthorized access' });
+    }
+
+    const votes = await User.find({}, { _id: 0, __v: 0 })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json(votes);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching votes', error: error.message });
+    console.error('Error fetching votes:', error);
+    res.status(500).json({ message: 'Error fetching votes' });
   }
 });
 
