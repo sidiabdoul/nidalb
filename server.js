@@ -29,28 +29,34 @@ const connectDB = async () => {
     await mongoose.connect(MONGODB_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
+      ssl: true,
+      sslValidate: false,
+      retryWrites: true,
+      w: 'majority',
+      maxPoolSize: 10,
+      minPoolSize: 5,
+      connectTimeoutMS: 10000,
+      heartbeatFrequencyMS: 2000,
+      retryReads: true
     });
-    console.log('Connected to MongoDB');
   } catch (err) {
-    console.error('MongoDB connection error:', err);
-    // Retry connection after 5 seconds
     setTimeout(connectDB, 5000);
   }
 };
 
-connectDB();
-
-// Handle MongoDB connection errors
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection error:', err);
+// Handle MongoDB connection events
+mongoose.connection.on('error', () => {
+  setTimeout(connectDB, 5000);
 });
 
 mongoose.connection.on('disconnected', () => {
-  console.log('MongoDB disconnected. Attempting to reconnect...');
-  connectDB();
+  setTimeout(connectDB, 5000);
 });
+
+// Initial connection
+connectDB();
 
 // User Schema
 const userSchema = new mongoose.Schema({
