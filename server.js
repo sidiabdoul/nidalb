@@ -11,15 +11,13 @@ const app = express();
 app.use(express.json());
 
 // CORS configuration
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL 
-    : 'http://localhost:3000',
+app.use(cors({
+  origin: ['https://nidalb.onrender.com', 'https://reclamation.vercel.app', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
-  optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
+  exposedHeaders: ['Content-Length', 'Content-Type']
+}));
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://abdoulsidi876:JeSuisMedy6002@cluster0.sf9qf8r.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
@@ -48,15 +46,9 @@ const userSchema = new mongoose.Schema({
   opinion: {
     type: String,
     default: ""
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
   }
+}, {
+  timestamps: true // This will add createdAt and updatedAt automatically
 });
 
 const User = mongoose.model('User', userSchema);
@@ -69,7 +61,7 @@ app.post('/api/vote', async (req, res) => {
     // Check if user already voted
     const existingVote = await User.findOne({ matricule });
     if (existingVote) {
-      return res.status(400).json({ error: 'User has already voted' });
+      return res.status(409).json({ message: 'User has already voted' });
     }
 
     // Create new vote
@@ -81,9 +73,9 @@ app.post('/api/vote', async (req, res) => {
     });
 
     await newVote.save();
-    res.status(201).json(newVote);
+    res.status(201).json({ message: 'Vote created successfully', data: newVote });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: 'Error creating vote', error: error.message });
   }
 });
 
@@ -110,46 +102,72 @@ app.get('/api/stats', async (req, res) => {
 
     // Get latest opinions
     const latestVotes = await User.find()
-      .select('name matricule choice opinion timestamp _id')
-      .sort({ timestamp: -1 })
+      .select('name matricule choice opinion createdAt _id')
+      .sort({ createdAt: -1 })
       .limit(10);
 
     res.json({
-      total,
-      stats: formatted,
-      latestVotes
+      message: 'Statistics retrieved successfully',
+      data: {
+        total,
+        stats: formatted,
+        latestVotes
+      }
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: 'Error fetching statistics', error: error.message });
   }
 });
 
 // Admin authentication middleware
 const authenticateAdmin = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token || token !== 'admin-token') {
-    return res.status(401).json({ message: 'Unauthorized' });
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ message: 'No authorization header' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    if (token !== 'admin-token') {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+
+    next();
+  } catch (error) {
+    return res.status(500).json({ message: 'Authentication error', error: error.message });
   }
-  next();
 };
 
 // Admin login endpoint
 app.post('/api/admin/login', (req, res) => {
-  const { username, password } = req.body;
-  if (username === 'sacsac' && password === '12344321') {
-    res.json({ token: 'admin-token' });
-  } else {
-    res.status(401).json({ message: 'Invalid credentials' });
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
+
+    if (username === 'sacsac' && password === '12344321') {
+      return res.json({ message: 'Login successful', data: { token: 'admin-token' } });
+    }
+
+    return res.status(401).json({ message: 'Invalid credentials' });
+  } catch (error) {
+    return res.status(500).json({ message: 'Login error', error: error.message });
   }
 });
 
 // Get all votes (admin only)
 app.get('/api/votes', authenticateAdmin, async (req, res) => {
   try {
-    const votes = await User.find().sort({ timestamp: -1 });
-    res.json(votes);
+    const votes = await User.find().sort({ createdAt: -1 });
+    res.json({ message: 'Votes retrieved successfully', data: votes });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching votes' });
+    res.status(500).json({ message: 'Error fetching votes', error: error.message });
   }
 });
 
@@ -159,22 +177,26 @@ app.get('/api/public/votes', async (req, res) => {
     const votes = await User.find()
       .select('name matricule choice opinion createdAt')
       .sort({ createdAt: -1 });
-    res.json(votes);
+    res.json({ message: 'Public votes retrieved successfully', data: votes });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching votes' });
+    res.status(500).json({ message: 'Error fetching public votes', error: error.message });
   }
 });
 
 // Update vote (admin only)
 app.put('/api/votes/:id', authenticateAdmin, async (req, res) => {
   try {
-    const vote = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const vote = await User.findByIdAndUpdate(
+      req.params.id, 
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
     if (!vote) {
       return res.status(404).json({ message: 'Vote not found' });
     }
-    res.json(vote);
+    res.json({ message: 'Vote updated successfully', data: vote });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating vote' });
+    res.status(500).json({ message: 'Error updating vote', error: error.message });
   }
 });
 
@@ -185,9 +207,9 @@ app.delete('/api/votes/:id', authenticateAdmin, async (req, res) => {
     if (!vote) {
       return res.status(404).json({ message: 'Vote not found' });
     }
-    res.json({ message: 'Vote deleted successfully' });
+    res.json({ message: 'Vote deleted successfully', data: vote });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting vote' });
+    res.status(500).json({ message: 'Error deleting vote', error: error.message });
   }
 });
 
