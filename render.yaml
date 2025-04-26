@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: nidalb
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        value: mongodb+srv://abdoulsidi876:JeSuisMedy6002@cluster0.sf9qf8r.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+      - key: FRONTEND_URL
+        value: https://nidal.vercel.app 
