@@ -258,7 +258,14 @@ app.post('/api/admin/login', (req, res) => {
     }
 
     if (username === 'sacsac' && password === '12344321') {
-      return res.json({ message: 'Login successful', data: { token: 'admin-token' } });
+      // Send the actual admin token from environment variables
+      return res.json({ 
+        message: 'Login successful', 
+        data: { 
+          token: process.env.ADMIN_TOKEN || 'admin-token',
+          username: username
+        } 
+      });
     }
 
     return res.status(401).json({ message: 'Invalid credentials' });
