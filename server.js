@@ -14,7 +14,7 @@ app.use(express.json());
 app.use(cors({
   origin: ['https://nidalb.onrender.com', 'https://reclamation.vercel.app', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-token'],
   credentials: true,
   exposedHeaders: ['Content-Length', 'Content-Type']
 }));
