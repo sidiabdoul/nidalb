@@ -226,26 +226,28 @@ app.get('/api/stats', async (req, res) => {
 });
 
 // Admin authentication middleware
-const authenticateAdmin = (req, res, next) => {
-  try {
+const adminAuth = (req, res, next) => {
+  // Check for admin token in either x-admin-token header or Authorization header
+  let adminToken = req.headers['x-admin-token'];
+  
+  // If not found in x-admin-token, check Authorization header
+  if (!adminToken) {
     const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ message: 'No authorization header' });
+    if (authHeader) {
+      adminToken = authHeader.split(' ')[1];
     }
-
-    const token = authHeader.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ message: 'No token provided' });
-    }
-
-    if (token !== 'admin-token') {
-      return res.status(403).json({ message: 'Invalid or expired token' });
-    }
-
-    next();
-  } catch (error) {
-    return res.status(500).json({ message: 'Authentication error', error: error.message });
   }
+  
+  if (!adminToken) {
+    return res.status(403).json({ message: 'Admin token is required' });
+  }
+
+  // Validate admin token
+  if (adminToken !== process.env.ADMIN_TOKEN && adminToken !== 'admin-token') {
+    return res.status(403).json({ message: 'Invalid admin token' });
+  }
+
+  next();
 };
 
 // Admin login endpoint
@@ -277,17 +279,6 @@ app.post('/api/admin/login', (req, res) => {
 // Get all votes (admin only)
 app.get('/api/votes', async (req, res) => {
   try {
-    // Check for admin token
-    const adminToken = req.headers['x-admin-token'];
-    if (!adminToken) {
-      return res.status(403).json({ message: 'Admin token is required' });
-    }
-
-    // Validate admin token
-    if (adminToken !== process.env.ADMIN_TOKEN) {
-      return res.status(403).json({ message: 'Invalid admin token' });
-    }
-
     const votes = await User.find({}, { _id: 0, __v: 0 })
       .sort({ createdAt: -1 })
       .lean();
@@ -312,7 +303,7 @@ app.get('/api/public/votes', async (req, res) => {
 });
 
 // Update vote (admin only)
-app.put('/api/votes/:id', authenticateAdmin, async (req, res) => {
+app.put('/api/votes/:id', adminAuth, async (req, res) => {
   try {
     const vote = await User.findByIdAndUpdate(
       req.params.id, 
@@ -329,7 +320,7 @@ app.put('/api/votes/:id', authenticateAdmin, async (req, res) => {
 });
 
 // Delete vote (admin only)
-app.delete('/api/votes/:id', authenticateAdmin, async (req, res) => {
+app.delete('/api/votes/:id', adminAuth, async (req, res) => {
   try {
     const vote = await User.findByIdAndDelete(req.params.id);
     if (!vote) {
