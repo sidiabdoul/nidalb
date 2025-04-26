@@ -23,9 +23,34 @@ app.use(cors({
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://abdoulsidi876:JeSuisMedy6002@cluster0.sf9qf8r.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 const PORT = process.env.PORT || 5000;
 
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+// MongoDB Connection with retry logic
+const connectDB = async () => {
+  try {
+    await mongoose.connect(MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    });
+    console.log('Connected to MongoDB');
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    // Retry connection after 5 seconds
+    setTimeout(connectDB, 5000);
+  }
+};
+
+connectDB();
+
+// Handle MongoDB connection errors
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected. Attempting to reconnect...');
+  connectDB();
+});
 
 // User Schema
 const userSchema = new mongoose.Schema({
@@ -56,32 +81,88 @@ const User = mongoose.model('User', userSchema);
 // Routes
 app.post('/api/vote', async (req, res) => {
   try {
-    const { matricule, choice, name, opinion } = req.body;
-    
-    // Check if user already voted
+    const { name, matricule, choice, opinion } = req.body;
+
+    // Validate required fields
+    if (!name || !matricule || !choice || !opinion) {
+      return res.status(400).json({
+        message: 'Missing required fields',
+        error: 'Please provide name, matricule, choice, and opinion'
+      });
+    }
+
+    // Validate choice value
+    if (choice !== 'for' && choice !== 'against') {
+      return res.status(400).json({
+        message: 'Invalid choice',
+        error: 'Choice must be either "for" or "against"'
+      });
+    }
+
+    // Check for duplicate vote
     const existingVote = await User.findOne({ matricule });
     if (existingVote) {
-      return res.status(409).json({ message: 'User has already voted' });
+      return res.status(409).json({
+        message: 'User has already voted',
+        error: 'A vote with this matricule already exists'
+      });
     }
 
     // Create new vote
-    const newVote = new User({
+    const vote = new User({
+      name,
       matricule,
       choice,
-      name,
       opinion
     });
 
-    await newVote.save();
-    res.status(201).json({ message: 'Vote created successfully', data: newVote });
+    await vote.save();
+
+    res.status(201).json({
+      message: 'Vote created successfully',
+      data: vote
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Error creating vote', error: error.message });
+    console.error('Error in /api/vote:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        message: 'Validation error',
+        error: Object.values(error.errors).map(err => err.message)
+      });
+    }
+
+    res.status(500).json({
+      message: 'Error creating vote',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
 // Get statistics
 app.get('/api/stats', async (req, res) => {
   try {
+    // Get total count first
+    const total = await User.countDocuments();
+    
+    // If no votes yet, return empty stats
+    if (total === 0) {
+      return res.json({
+        message: 'Statistics retrieved successfully',
+        data: {
+          total: 0,
+          stats: {
+            for: { count: 0, percentage: "0.00" },
+            against: { count: 0, percentage: "0.00" }
+          },
+          latestVotes: []
+        }
+      });
+    }
+
+    // Get vote counts by choice
     const stats = await User.aggregate([
       {
         $group: {
@@ -91,14 +172,20 @@ app.get('/api/stats', async (req, res) => {
       }
     ]);
     
-    const total = stats.reduce((acc, curr) => acc + curr.count, 0);
-    const formatted = stats.reduce((acc, curr) => {
-      acc[curr._id] = {
-        count: curr.count,
-        percentage: ((curr.count / total) * 100).toFixed(2)
-      };
-      return acc;
-    }, {});
+    // Format stats with default values for missing choices
+    const formatted = {
+      for: { count: 0, percentage: "0.00" },
+      against: { count: 0, percentage: "0.00" }
+    };
+
+    stats.forEach(stat => {
+      if (stat._id) {
+        formatted[stat._id] = {
+          count: stat.count,
+          percentage: ((stat.count / total) * 100).toFixed(2)
+        };
+      }
+    });
 
     // Get latest opinions
     const latestVotes = await User.find()
@@ -115,7 +202,12 @@ app.get('/api/stats', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching statistics', error: error.message });
+    console.error('Error in /api/stats:', error);
+    res.status(500).json({ 
+      message: 'Error fetching statistics', 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
