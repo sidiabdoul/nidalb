@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const dotenv = require('dotenv');
-const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -191,15 +190,6 @@ app.delete('/api/votes/:id', authenticateAdmin, async (req, res) => {
     res.status(500).json({ message: 'Error deleting vote' });
   }
 });
-
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/build')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
-  });
-}
 
 // Error handling middleware
 app.use((err, req, res, next) => {
